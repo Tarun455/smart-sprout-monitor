@@ -13,15 +13,16 @@ import {
   DataSnapshot,
   push,
   remove
-} from 'firebase/database';
+}
+from 'firebase/database';
 import { getAuth, signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
 import { toast } from "react-hot-toast";
 
 // Firebase configuration from the ESP32 code
 const firebaseConfig = {
-  apiKey: "your_firebase_api_key",
-  databaseURL: "your_firebase_database_url",
-  projectId: "your_project_id",
+  apiKey: "[YOUR_FIREBASE_API_KEY]",
+  databaseURL: "[YOUR_FIREBASE_DATABASE_URL]",
+  projectId: "[YOUR_PROJECT_ID]",
 };
 
 // Initialize Firebase
@@ -31,25 +32,31 @@ const auth = getAuth(app);
 
 // Track authentication state
 let isAuthenticated = false;
+let authPromise: Promise<void> | null = null;
 
 // Helper function to ensure authentication before accessing data
 export function ensureAuthentication(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (isAuthenticated) {
-      resolve();
-      return;
-    }
+  if (isAuthenticated) {
+    return Promise.resolve();
+  }
 
+  if (authPromise) {
+    return authPromise;
+  }
+
+  authPromise = new Promise((resolve, reject) => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       unsubscribe();
       if (user) {
         isAuthenticated = true;
+        console.log('User already authenticated:', user.uid);
         resolve();
       } else {
+        console.log('No user found, signing in anonymously...');
         signInAnonymously(auth)
-          .then(() => {
+          .then((userCredential) => {
             isAuthenticated = true;
-            console.log('Signed in anonymously to Firebase');
+            console.log('Signed in anonymously to Firebase:', userCredential.user.uid);
             resolve();
           })
           .catch((error) => {
@@ -58,19 +65,24 @@ export function ensureAuthentication(): Promise<void> {
             reject(error);
           });
       }
+    }, (error) => {
+      // Handle auth state change errors
+      unsubscribe();
+      console.error('Auth state change error:', error);
+      reject(error);
     });
   });
+
+  return authPromise;
 }
 
-// Sign in anonymously to ensure database access
-signInAnonymously(auth)
+// Initialize authentication immediately
+ensureAuthentication()
   .then(() => {
-    isAuthenticated = true;
-    console.log('Signed in anonymously to Firebase');
+    console.log('Firebase authentication initialized successfully');
   })
   .catch((error) => {
-    console.error('Error signing in anonymously:', error);
-    toast.error('Failed to authenticate with Firebase');
+    console.error('Failed to initialize Firebase authentication:', error);
   });
 
 // Database reference paths
@@ -91,7 +103,7 @@ export interface SensorData {
   temperature: number[];
   humidity: number[];
   moisture: number[];
-  co2: number;
+  soilTemperature: number[];
   lastUpdate: number;
   memory?: number;
 }
@@ -108,7 +120,8 @@ export interface RelayStatus {
 export interface ThresholdValues {
   moisture: number;
   temperature: number;
-  co2: number;
+  soilTemperature: number;
+  humidity: number;
   lightOn: string;
   lightOff: string;
 }
@@ -131,11 +144,14 @@ export interface SystemStatus {
 // History data point interface
 export interface HistoryDataPoint {
   datetimeUpdate: number | string;  // Can be timestamp in milliseconds or string
-  co2: number;
-  humidity0: number;
-  humidity1: number;
-  temperature0: number;
-  temperature1: number;
+  humidity0: number;              // Greenhouse humidity sensor 1
+  humidity1: number;              // Greenhouse humidity sensor 2
+  humidity2: number;              // Outside humidity sensor 3 for comparison
+  temperature0: number;           // Greenhouse temperature sensor 1
+  temperature1: number;           // Greenhouse temperature sensor 2
+  temperature2: number;           // Outside temperature sensor 3 for comparison
+  soilTemperature0: number;       // Soil temperature sensor 1
+  soilTemperature1: number;       // Soil temperature sensor 2
   moisture0: number;
   moisture1: number;
   moisture2: number;
@@ -148,7 +164,8 @@ export interface AlertSettings {
   email: string;
   temperatureAlerts: boolean;
   moistureAlerts: boolean;
-  co2Alerts: boolean;
+  soilTemperatureAlerts: boolean;
+  humidityAlerts: boolean;
 }
 
 // ESP32-CAM Status interface
@@ -181,67 +198,151 @@ export interface Photo {
 
 // Subscribe to sensor data updates
 export function subscribeSensorData(callback: (data: SensorData) => void) {
-  return onValue(sensorsRef, (snapshot) => {
-    const data = snapshot.val() as SensorData | null;
-    if (data) {
-      callback(data);
+  let unsubscribeFunction: (() => void) | null = null;
+  let isSubscriptionActive = true;
+  
+  const cleanup = () => {
+    isSubscriptionActive = false;
+    if (unsubscribeFunction) {
+      unsubscribeFunction();
+      unsubscribeFunction = null;
     }
-  }, (error) => {
-    console.error('Error subscribing to sensor data:', error);
-    toast.error('Failed to load sensor data');
-  });
+  };
+  
+  ensureAuthentication()
+    .then(() => {
+      if (!isSubscriptionActive) return; // Check if cleanup was called during auth
+      
+      const unsubscribe = onValue(sensorsRef, (snapshot) => {
+        if (!isSubscriptionActive) return; // Check if cleanup was called
+        
+        const data = snapshot.val() as SensorData | null;
+        if (data) {
+          callback(data);
+        }
+      }, (error) => {
+        if (!isSubscriptionActive) return;
+        console.error('Error subscribing to sensor data:', error);
+        toast.error('Failed to load sensor data');
+      });
+      
+      unsubscribeFunction = unsubscribe;
+    })
+    .catch(error => {
+      if (!isSubscriptionActive) return;
+      console.error('Authentication error when subscribing to sensor data:', error);
+      toast.error('Authentication failed when loading sensor data');
+    });
+  
+  return cleanup;
 }
 
 // Subscribe to relay status updates
 export function subscribeRelayStatus(callback: (status: RelayStatus) => void) {
-  return onValue(relaysRef, (snapshot) => {
-    const status = snapshot.val() as RelayStatus | null;
-    if (status) {
-      callback(status);
-    }
-  }, (error) => {
-    console.error('Error subscribing to relay status:', error);
-    toast.error('Failed to load relay status');
-  });
+  let unsubscribeFunction = () => {};
+  
+  ensureAuthentication()
+    .then(() => {
+      const unsubscribe = onValue(relaysRef, (snapshot) => {
+        const status = snapshot.val() as RelayStatus | null;
+        if (status) {
+          callback(status);
+        }
+      }, (error) => {
+        console.error('Error subscribing to relay status:', error);
+        toast.error('Failed to load relay status');
+      });
+      unsubscribeFunction = unsubscribe;
+    })
+    .catch(error => {
+      console.error('Authentication error when subscribing to relay status:', error);
+      toast.error('Authentication failed when loading relay status');
+    });
+  
+  return () => {
+    unsubscribeFunction();
+  };
 }
 
 // Subscribe to threshold updates
 export function subscribeThresholds(callback: (thresholds: ThresholdValues) => void) {
-  return onValue(thresholdsRef, (snapshot) => {
-    const thresholds = snapshot.val() as ThresholdValues | null;
-    if (thresholds) {
-      callback(thresholds);
-    }
-  }, (error) => {
-    console.error('Error subscribing to thresholds:', error);
-    toast.error('Failed to load threshold values');
-  });
+  let unsubscribeFunction = () => {};
+  
+  ensureAuthentication()
+    .then(() => {
+      const unsubscribe = onValue(thresholdsRef, (snapshot) => {
+        const thresholds = snapshot.val() as ThresholdValues | null;
+        if (thresholds) {
+          callback(thresholds);
+        }
+      }, (error) => {
+        console.error('Error subscribing to thresholds:', error);
+        toast.error('Failed to load threshold values');
+      });
+      unsubscribeFunction = unsubscribe;
+    })
+    .catch(error => {
+      console.error('Authentication error when subscribing to thresholds:', error);
+      toast.error('Authentication failed when loading thresholds');
+    });
+  
+  return () => {
+    unsubscribeFunction();
+  };
 }
 
 // Subscribe to mode settings
 export function subscribeMode(callback: (mode: ModeSettings) => void) {
-  return onValue(modeRef, (snapshot) => {
-    const mode = snapshot.val() as ModeSettings | null;
-    if (mode) {
-      callback(mode);
-    }
-  }, (error) => {
-    console.error('Error subscribing to mode settings:', error);
-    toast.error('Failed to load mode settings');
-  });
+  let unsubscribeFunction = () => {};
+  
+  ensureAuthentication()
+    .then(() => {
+      const unsubscribe = onValue(modeRef, (snapshot) => {
+        const mode = snapshot.val() as ModeSettings | null;
+        if (mode) {
+          callback(mode);
+        }
+      }, (error) => {
+        console.error('Error subscribing to mode settings:', error);
+        toast.error('Failed to load mode settings');
+      });
+      unsubscribeFunction = unsubscribe;
+    })
+    .catch(error => {
+      console.error('Authentication error when subscribing to mode settings:', error);
+      toast.error('Authentication failed when loading mode settings');
+    });
+  
+  return () => {
+    unsubscribeFunction();
+  };
 }
 
 // Subscribe to system status
 export function subscribeSystemStatus(callback: (status: SystemStatus) => void) {
-  return onValue(statusRef, (snapshot) => {
-    const status = snapshot.val() as SystemStatus | null;
-    if (status) {
-      callback(status);
-    }
-  }, (error) => {
-    console.error('Error subscribing to system status:', error);
-    toast.error('Failed to load system status');
-  });
+  let unsubscribeFunction = () => {};
+  
+  ensureAuthentication()
+    .then(() => {
+      const unsubscribe = onValue(statusRef, (snapshot) => {
+        const status = snapshot.val() as SystemStatus | null;
+        if (status) {
+          callback(status);
+        }
+      }, (error) => {
+        console.error('Error subscribing to system status:', error);
+        toast.error('Failed to load system status');
+      });
+      unsubscribeFunction = unsubscribe;
+    })
+    .catch(error => {
+      console.error('Authentication error when subscribing to system status:', error);
+      toast.error('Authentication failed when loading system status');
+    });
+  
+  return () => {
+    unsubscribeFunction();
+  };
 }
 
 // Subscribe to alert settings
@@ -261,10 +362,17 @@ export function subscribeAlerts(callback: (alertSettings: AlertSettings) => void
             email: '',
             temperatureAlerts: false,
             moistureAlerts: false,
-            co2Alerts: false
+            soilTemperatureAlerts: false,
+            humidityAlerts: false
           };
           // Create default settings in Firebase
           update(alertsRef, settings);
+        }
+        
+        // Ensure humidityAlerts field exists for existing settings
+        if (settings.humidityAlerts === undefined) {
+          settings.humidityAlerts = false;
+          update(alertsRef, { humidityAlerts: false });
         }
         
         callback(settings);
@@ -290,37 +398,52 @@ export function subscribeAlerts(callback: (alertSettings: AlertSettings) => void
 
 // Subscribe to ESP32-CAM status
 export function subscribeESP32Status(callback: (status: ESP32Status | null) => void) {
-  return onValue(esp32StatusRef, (snapshot) => {
-    const status = snapshot.val() as ESP32Status | null;
-    
-    if (status) {
-      callback(status);
-    } else {
-      console.log("No ESP32-CAM status in Firebase, creating default");
-      // If no status exists, create a default one
-      const defaultStatus: ESP32Status = {
-        flashState: 'OFF',
-        photoIntervalHours: '12.0',
-        lastUpdate: Date.now(),
-        ipAddress: 'Not connected yet'
-      };
-      
-      // Update Firebase with default status
-      set(esp32StatusRef, defaultStatus)
-        .then(() => {
-          console.log("Default ESP32-CAM status created");
-          callback(defaultStatus);
-        })
-        .catch((error) => {
-          console.error("Error creating default ESP32-CAM status:", error);
-          callback(null);
-        });
-    }
-  }, (error) => {
-    console.error('Error subscribing to ESP32-CAM status:', error);
-    toast.error('Failed to load ESP32-CAM status');
-    callback(null);
-  });
+  let unsubscribeFunction = () => {};
+  
+  ensureAuthentication()
+    .then(() => {
+      const unsubscribe = onValue(esp32StatusRef, (snapshot) => {
+        const status = snapshot.val() as ESP32Status | null;
+        
+        if (status) {
+          callback(status);
+        } else {
+          console.log("No ESP32-CAM status in Firebase, creating default");
+          // If no status exists, create a default one
+          const defaultStatus: ESP32Status = {
+            flashState: 'OFF',
+            photoIntervalHours: '12.0',
+            lastUpdate: Date.now(),
+            ipAddress: 'Not connected yet'
+          };
+          
+          // Update Firebase with default status
+          set(esp32StatusRef, defaultStatus)
+            .then(() => {
+              console.log("Default ESP32-CAM status created");
+              callback(defaultStatus);
+            })
+            .catch((error) => {
+              console.error("Error creating default ESP32-CAM status:", error);
+              callback(null);
+            });
+        }
+      }, (error) => {
+        console.error('Error subscribing to ESP32-CAM status:', error);
+        toast.error('Failed to load ESP32-CAM status');
+        callback(null);
+      });
+      unsubscribeFunction = unsubscribe;
+    })
+    .catch(error => {
+      console.error('Authentication error when subscribing to ESP32-CAM status:', error);
+      toast.error('Authentication failed when loading ESP32-CAM status');
+      callback(null);
+    });
+  
+  return () => {
+    unsubscribeFunction();
+  };
 }
 
 // Send a command to ESP32-CAM with the new command structure
@@ -372,42 +495,58 @@ export function setPhotoInterval(hours: number) {
 // Subscribe to ESP32-CAM photos
 export function subscribePhotos(callback: (photos: Photo[]) => void) {
   console.log('Setting up photo subscription');
-  try {
-    // Query to get the latest 100 photos, ordered by timestamp (most recent first)
-    const photosQuery = query(
-      photosRef, 
-      orderByChild('timestamp'), 
-      limitToLast(100)
-    );
-    
-    return onValue(photosQuery, (snapshot) => {
-      const data = snapshot.val();
-      if (!data) {
-        console.log('No photos found in Firebase');
+  let unsubscribeFunction = () => {};
+  
+  ensureAuthentication()
+    .then(() => {
+      try {
+        // Query to get the latest 100 photos, ordered by timestamp (most recent first)
+        const photosQuery = query(
+          photosRef, 
+          orderByChild('timestamp'), 
+          limitToLast(100)
+        );
+        
+        const unsubscribe = onValue(photosQuery, (snapshot) => {
+          const data = snapshot.val();
+          if (!data) {
+            console.log('No photos found in Firebase');
+            callback([]);
+            return;
+          }
+          
+          // Convert the object to an array and sort by timestamp in descending order
+          const photoArray: Photo[] = Object.entries(data).map(([id, photoData]: [string, any]) => ({
+            id,
+            imageData: photoData.imageData || '',
+            timestamp: photoData.timestamp || Date.now(),
+            caption: photoData.caption || ''
+          }))
+          .sort((a, b) => b.timestamp - a.timestamp); // Sort in descending order (newest first)
+          
+          console.log(`Retrieved ${photoArray.length} photos from ESP32-CAM`);
+          callback(photoArray);
+        }, (error) => {
+          console.error('Error subscribing to photos:', error);
+          toast.error('Failed to load plant photos');
+          callback([]);
+        });
+        
+        unsubscribeFunction = unsubscribe;
+      } catch (error) {
+        console.error('Error setting up photo subscription:', error);
         callback([]);
-        return;
       }
-      
-      // Convert the object to an array and sort by timestamp in descending order
-      const photoArray: Photo[] = Object.entries(data).map(([id, photoData]: [string, any]) => ({
-        id,
-        imageData: photoData.imageData || '',
-        timestamp: photoData.timestamp || Date.now(),
-        caption: photoData.caption || ''
-      }))
-      .sort((a, b) => b.timestamp - a.timestamp); // Sort in descending order (newest first)
-      
-      console.log(`Retrieved ${photoArray.length} photos from ESP32-CAM`);
-      callback(photoArray);
-    }, (error) => {
-      console.error('Error subscribing to photos:', error);
-      toast.error('Failed to load plant photos');
+    })
+    .catch(error => {
+      console.error('Authentication error when subscribing to photos:', error);
+      toast.error('Authentication failed when loading photos');
       callback([]);
     });
-  } catch (error) {
-    console.error('Error setting up photo subscription:', error);
-    return () => {}; // Return dummy unsubscribe function
-  }
+  
+  return () => {
+    unsubscribeFunction();
+  };
 }
 
 // Save a new photo directly to Firebase (for testing purposes)

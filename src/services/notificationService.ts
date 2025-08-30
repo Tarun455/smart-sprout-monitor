@@ -11,7 +11,6 @@ const USER_ID = "user_your_id"; // Replace with your EmailJS user ID
 const lastAlertSent: Record<string, number> = {
   temperature: 0,
   moisture: 0,
-  co2: 0,
 };
 
 // Cooldown period between alerts (10 minutes)
@@ -21,7 +20,6 @@ const ALERT_COOLDOWN_MS = 10 * 60 * 1000;
 interface AlertEnabledSettings {
   temperatureAlerts?: boolean;
   moistureAlerts?: boolean;
-  co2Alerts?: boolean;
 }
 
 export const checkThresholds = (
@@ -30,8 +28,7 @@ export const checkThresholds = (
   userEmail?: string,
   alertEnabled: AlertEnabledSettings = {
     temperatureAlerts: true,
-    moistureAlerts: true,
-    co2Alerts: true
+    moistureAlerts: true
   }
 ): void => {
   if (!sensorData || !thresholds) return;
@@ -44,13 +41,14 @@ export const checkThresholds = (
   const moisture3 = sensorData.moisture[2] || 0;
   const moisture4 = sensorData.moisture[3] || 0;
   
-  // Check temperature if enabled
+  // Check greenhouse temperature if enabled (sensors 1 & 2 only)
   if (alertEnabled.temperatureAlerts !== false) {
-    const avgTemperature = sensorData.temperature.reduce((sum, val) => sum + val, 0) / sensorData.temperature.length;
-    if (avgTemperature > thresholds.temperature && (now - lastAlertSent.temperature) > ALERT_COOLDOWN_MS) {
+    const greenhouseTemperatures = sensorData.temperature.slice(0, 2); // Only greenhouse sensors 1 & 2
+    const avgGreenhouseTemperature = greenhouseTemperatures.reduce((sum, val) => sum + val, 0) / greenhouseTemperatures.length;
+    if (avgGreenhouseTemperature > thresholds.temperature && (now - lastAlertSent.temperature) > ALERT_COOLDOWN_MS) {
       sendAlert(
         'temperature', 
-        `Temperature threshold exceeded: ${avgTemperature.toFixed(1)}°C (threshold: ${thresholds.temperature}°C)`,
+        `Greenhouse temperature threshold exceeded: ${avgGreenhouseTemperature.toFixed(1)}°C (threshold: ${thresholds.temperature}°C)`,
         userEmail
       );
       lastAlertSent.temperature = now;
@@ -70,18 +68,7 @@ export const checkThresholds = (
     }
   }
   
-  // Check CO2 if enabled
-  if (alertEnabled.co2Alerts !== false) {
-    const co2Level = sensorData.co2;
-    if (co2Level > thresholds.co2 && (now - lastAlertSent.co2) > ALERT_COOLDOWN_MS) {
-      sendAlert(
-        'co2',
-        `CO₂ level threshold exceeded: ${co2Level.toFixed(0)} ppm (threshold: ${thresholds.co2} ppm)`,
-        userEmail
-      );
-      lastAlertSent.co2 = now;
-    }
-  }
+
 };
 
 const sendAlert = async (type: string, message: string, email?: string): Promise<void> => {

@@ -1,12 +1,10 @@
 
 import { useState, useEffect } from 'react';
-import { Droplet, Fan, SunMedium, ToggleLeft, ToggleRight, AlertCircle } from 'lucide-react';
+import { Droplet, Fan, Sun, Power, AlertTriangle, Zap } from 'lucide-react';
 import { subscribeRelayStatus, RelayStatus, updateRelay, subscribeMode, ModeSettings, updateMode } from '@/services/firebase';
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { format } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 
 const ControlPanel = () => {
@@ -30,14 +28,14 @@ const ControlPanel = () => {
           }
         });
       }
-      
+
       setRelayStatus(status);
     });
-    
+
     const unsubscribeMode = subscribeMode(mode => {
       setModeSettings(mode);
     });
-    
+
     return () => {
       unsubscribeRelays();
       unsubscribeMode();
@@ -52,16 +50,16 @@ const ControlPanel = () => {
       toast.error("Cannot control relays in automatic mode");
       return;
     }
-    
+
     setIsLoading(prev => ({
       ...prev,
       [relay]: true
     }));
-    
+
     try {
       const newStatus = !relayStatus[relay];
       await updateRelay(relay, newStatus);
-      
+
       // Update last changed timestamp
       setLastChanged(prev => ({
         ...prev,
@@ -96,103 +94,140 @@ const ControlPanel = () => {
   };
 
   if (!relayStatus || !modeSettings) {
-    return <div className="sensor-card glass animate-pulse h-32">
-        <div className="h-4 w-32 bg-gray-200 rounded mb-6"></div>
-        <div className="flex justify-between">
-          {[...Array(4)].map((_, i) => <div key={i} className="h-10 w-16 bg-gray-200 rounded"></div>)}
-        </div>
-      </div>;
+    return <div className="modern-card p-3 sm:p-4 animate-pulse">
+      <div className="h-4 w-32 bg-muted rounded mb-4"></div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+        {[...Array(4)].map((_, i) => <div key={i} className="h-16 sm:h-20 bg-muted rounded"></div>)}
+      </div>
+    </div>;
   }
 
   const isAutomatic = modeSettings.automatic;
-  
-  return <div className="sensor-card glass animate-scale-in">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="font-semibold">Control Panel</h3>
-        <div className="flex items-center">
-          <span className="text-sm mr-2">Mode:</span>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Switch checked={isAutomatic} onCheckedChange={handleModeToggle} disabled={isLoading.mode} className="font-normal text-sky-600 bg-slate-500 hover:bg-slate-400" />
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                <p>{isAutomatic ? 'Automatic Mode' : 'Manual Mode'}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <span className="ml-2 text-sm font-medium">
-            {isAutomatic ? <span className="text-blue-500 flex items-center">
-                <ToggleRight className="h-4 w-4 mr-1" /> Auto
-              </span> : <span className="text-amber-500 flex items-center">
-                <ToggleLeft className="h-4 w-4 mr-1" /> Manual
-              </span>}
+
+  return <div className="modern-card p-3 sm:p-4 fade-in">
+    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0 mb-4">
+      <div className="flex items-center space-x-2">
+        <Power className="h-4 w-4 text-primary flex-shrink-0" />
+        <h3 className="font-medium text-foreground">Control Panel</h3>
+      </div>
+      <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2">
+          <span className="text-xs text-muted-foreground mono">
+            {isAutomatic ? 'AUTO' : 'MANUAL'}
           </span>
+          <Switch
+            checked={isAutomatic}
+            onCheckedChange={handleModeToggle}
+            disabled={isLoading.mode}
+            className="data-[state=checked]:bg-primary"
+          />
+        </div>
+        <div className={`status-dot ${isAutomatic ? 'status-online' : 'status-warning'}`} />
+      </div>
+    </div>
+
+    {isAutomatic && <div className="bg-primary/5 border border-primary/20 rounded-md p-3 mb-4 flex items-center">
+      <AlertTriangle className="h-4 w-4 mr-2 flex-shrink-0 text-primary" />
+      <span className="text-xs text-muted-foreground">System is in automatic mode. Manual controls are disabled.</span>
+    </div>}
+
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* Pump 1 */}
+      <div
+        className={`control-button p-3 rounded-lg border cursor-pointer transition-all ${relayStatus.pump1
+          ? 'bg-primary/10 border-primary/30 text-primary'
+          : 'bg-card/50 border-border/50 text-muted-foreground hover:text-foreground hover:border-border'
+          } ${isAutomatic || isLoading.pump1 ? 'opacity-50 cursor-not-allowed' : ''}`}
+        onClick={() => !isAutomatic && !isLoading.pump1 && handleRelayToggle('pump1')}
+      >
+        <div className="flex flex-col items-center space-y-2">
+          <Droplet className="h-5 w-5" />
+          <div className="text-center">
+            <div className="text-xs font-medium mono">PUMP 1</div>
+            <div className={`text-xs mono ${relayStatus.pump1 ? 'text-primary' : 'text-muted-foreground'}`}>
+              {relayStatus.pump1 ? 'ON' : 'OFF'}
+            </div>
+            {lastChanged.pump1 && (
+              <div className="text-[10px] text-muted-foreground mt-1 mono">
+                {lastChanged.pump1}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {isAutomatic && <div className="bg-amber-50 border border-amber-200 rounded-md p-3 mb-4 flex items-center text-amber-800">
-          <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
-          <span className="text-xs">Controls are disabled in automatic mode. System is automatically controlling devices based on sensor readings.</span>
-        </div>}
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {/* Pump 1 */}
-        <Button variant="outline" size="lg" className={`control-button flex flex-col items-center justify-center py-4 ${relayStatus.pump1 ? 'bg-blue-50 border-blue-200 text-blue-500' : ''}`} onClick={() => handleRelayToggle('pump1')} disabled={isAutomatic || isLoading.pump1}>
-          <Droplet className={`h-6 w-6 mb-1 ${relayStatus.pump1 ? 'text-blue-500' : ''}`} />
-          <span className="text-xs font-medium">Pump 1</span>
-          <span className="text-xs mt-1">
-            {relayStatus.pump1 ? 'ON' : 'OFF'}
-          </span>
-          {lastChanged.pump1 && (
-            <span className="text-[10px] text-muted-foreground mt-1">
-              Changed: {lastChanged.pump1}
-            </span>
-          )}
-        </Button>
-
-        {/* Pump 2 */}
-        <Button variant="outline" size="lg" className={`control-button flex flex-col items-center justify-center py-4 ${relayStatus.pump2 ? 'bg-blue-50 border-blue-200 text-blue-500' : ''}`} onClick={() => handleRelayToggle('pump2')} disabled={isAutomatic || isLoading.pump2}>
-          <Droplet className={`h-6 w-6 mb-1 ${relayStatus.pump2 ? 'text-blue-500' : ''}`} />
-          <span className="text-xs font-medium">Pump 2</span>
-          <span className="text-xs mt-1">
-            {relayStatus.pump2 ? 'ON' : 'OFF'}
-          </span>
-          {lastChanged.pump2 && (
-            <span className="text-[10px] text-muted-foreground mt-1">
-              Changed: {lastChanged.pump2}
-            </span>
-          )}
-        </Button>
-
-        {/* Fan */}
-        <Button variant="outline" size="lg" className={`control-button flex flex-col items-center justify-center py-4 ${relayStatus.fan ? 'bg-blue-50 border-blue-200 text-blue-500' : ''}`} onClick={() => handleRelayToggle('fan')} disabled={isAutomatic || isLoading.fan}>
-          <Fan className={`h-6 w-6 mb-1 ${relayStatus.fan ? 'text-blue-500' : ''}`} />
-          <span className="text-xs font-medium">Fan</span>
-          <span className="text-xs mt-1">
-            {relayStatus.fan ? 'ON' : 'OFF'}
-          </span>
-          {lastChanged.fan && (
-            <span className="text-[10px] text-muted-foreground mt-1">
-              Changed: {lastChanged.fan}
-            </span>
-          )}
-        </Button>
-
-        {/* Light */}
-        <Button variant="outline" size="lg" className={`control-button flex flex-col items-center justify-center py-4 ${relayStatus.light ? 'bg-blue-50 border-blue-200 text-blue-500' : ''}`} onClick={() => handleRelayToggle('light')} disabled={isAutomatic || isLoading.light}>
-          <SunMedium className={`h-6 w-6 mb-1 ${relayStatus.light ? 'text-blue-500' : ''}`} />
-          <span className="text-xs font-medium">Lights</span>
-          <span className="text-xs mt-1">
-            {relayStatus.light ? 'ON' : 'OFF'}
-          </span>
-          {lastChanged.light && (
-            <span className="text-[10px] text-muted-foreground mt-1">
-              Changed: {lastChanged.light}
-            </span>
-          )}
-        </Button>
+      {/* Pump 2 */}
+      <div
+        className={`control-button p-3 rounded-lg border cursor-pointer transition-all ${relayStatus.pump2
+          ? 'bg-primary/10 border-primary/30 text-primary'
+          : 'bg-card/50 border-border/50 text-muted-foreground hover:text-foreground hover:border-border'
+          } ${isAutomatic || isLoading.pump2 ? 'opacity-50 cursor-not-allowed' : ''}`}
+        onClick={() => !isAutomatic && !isLoading.pump2 && handleRelayToggle('pump2')}
+      >
+        <div className="flex flex-col items-center space-y-2">
+          <Droplet className="h-5 w-5" />
+          <div className="text-center">
+            <div className="text-xs font-medium mono">PUMP 2</div>
+            <div className={`text-xs mono ${relayStatus.pump2 ? 'text-primary' : 'text-muted-foreground'}`}>
+              {relayStatus.pump2 ? 'ON' : 'OFF'}
+            </div>
+            {lastChanged.pump2 && (
+              <div className="text-[10px] text-muted-foreground mt-1 mono">
+                {lastChanged.pump2}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
-    </div>;
+
+      {/* Fan */}
+      <div
+        className={`control-button p-3 rounded-lg border cursor-pointer transition-all ${relayStatus.fan
+          ? 'bg-primary/10 border-primary/30 text-primary'
+          : 'bg-card/50 border-border/50 text-muted-foreground hover:text-foreground hover:border-border'
+          } ${isAutomatic || isLoading.fan ? 'opacity-50 cursor-not-allowed' : ''}`}
+        onClick={() => !isAutomatic && !isLoading.fan && handleRelayToggle('fan')}
+      >
+        <div className="flex flex-col items-center space-y-2">
+          <Fan className="h-5 w-5" />
+          <div className="text-center">
+            <div className="text-xs font-medium mono">FAN</div>
+            <div className={`text-xs mono ${relayStatus.fan ? 'text-primary' : 'text-muted-foreground'}`}>
+              {relayStatus.fan ? 'ON' : 'OFF'}
+            </div>
+            {lastChanged.fan && (
+              <div className="text-[10px] text-muted-foreground mt-1 mono">
+                {lastChanged.fan}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Light */}
+      <div
+        className={`control-button p-3 rounded-lg border cursor-pointer transition-all ${relayStatus.light
+          ? 'bg-primary/10 border-primary/30 text-primary'
+          : 'bg-card/50 border-border/50 text-muted-foreground hover:text-foreground hover:border-border'
+          } ${isAutomatic || isLoading.light ? 'opacity-50 cursor-not-allowed' : ''}`}
+        onClick={() => !isAutomatic && !isLoading.light && handleRelayToggle('light')}
+      >
+        <div className="flex flex-col items-center space-y-2">
+          <Sun className="h-5 w-5" />
+          <div className="text-center">
+            <div className="text-xs font-medium mono">LIGHTS</div>
+            <div className={`text-xs mono ${relayStatus.light ? 'text-primary' : 'text-muted-foreground'}`}>
+              {relayStatus.light ? 'ON' : 'OFF'}
+            </div>
+            {lastChanged.light && (
+              <div className="text-[10px] text-muted-foreground mt-1 mono">
+                {lastChanged.light}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>;
 };
 export default ControlPanel;

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import Header from '@/components/Header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Camera as CameraIcon, RefreshCw, Zap, Clock, Send, X, ExternalLink, Download, Trash2 } from 'lucide-react';
+import { Camera as CameraIcon, RefreshCw, Zap, Clock, Send, X, ExternalLink, Download, Trash2, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -199,30 +199,46 @@ const Camera = () => {
           <p className="text-sm text-muted-foreground/80 mt-2">Take a photo using the controls to see it here!</p>
         </div>;
     }
-    return <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {photos.map(photo => <div key={photo.id} className="border rounded-lg overflow-hidden bg-white dark:bg-gray-900 hover:shadow-md transition-shadow">
+    return <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {photos.map(photo => <div key={photo.id} className="modern-card p-0 overflow-hidden hover:border-border transition-all group">
             <div className="relative aspect-video cursor-pointer" onClick={() => openFullSize(photo)}>
-              <img src={`data:image/jpeg;base64,${photo.imageData}`} alt={photo.caption || "Plant photo"} className="object-cover w-full h-full" onError={e => {
-            console.error('Error loading image:', photo.id);
-            // Fallback image on error
-            (e.target as HTMLImageElement).src = "https://via.placeholder.com/800x600?text=Image+Not+Available";
-          }} />
+              <img 
+                src={`data:image/jpeg;base64,${photo.imageData}`} 
+                alt={photo.caption || "Plant photo"} 
+                className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300" 
+                onError={e => {
+                  console.error('Error loading image:', photo.id);
+                  (e.target as HTMLImageElement).src = "https://via.placeholder.com/800x600?text=Image+Not+Available";
+                }} 
+              />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
             </div>
-            <div className="p-2">
+            <div className="p-3">
               <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  {photo.caption && <p className="text-sm line-clamp-2">
+                <div className="flex-1 min-w-0">
+                  {photo.caption && <p className="text-xs text-muted-foreground mono truncate">
                       {formatCaption(photo.caption)}
                     </p>}
                 </div>
-                <div className="flex space-x-1">
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={e => {
-                e.stopPropagation();
-                downloadPhoto(photo.imageData, `plant-photo-${new Date(photo.timestamp).toISOString().slice(0, 10)}.jpg`);
-              }}>
+                <div className="flex space-x-1 ml-2">
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" 
+                    onClick={e => {
+                      e.stopPropagation();
+                      downloadPhoto(photo.imageData, `plant-photo-${new Date(photo.timestamp).toISOString().slice(0, 10)}.jpg`);
+                    }}
+                  >
                     <Download className="h-3 w-3" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900" onClick={e => handleDeletePhoto(photo.id, e)} disabled={deleteLoading === photo.id}>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive" 
+                    onClick={e => handleDeletePhoto(photo.id, e)} 
+                    disabled={deleteLoading === photo.id}
+                  >
                     {deleteLoading === photo.id ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                   </Button>
                 </div>
@@ -234,87 +250,115 @@ const Camera = () => {
   return <div className="min-h-screen bg-background">
       <Header />
       
-      <main className="container mx-auto px-4 pb-16 animate-fade-in">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-semibold">Camera Control</h1>
-        </div>
-        
+      <main className="container mx-auto px-4 py-6 fade-in">
         <div className="grid gap-6 md:grid-cols-2">
           {/* Camera Controls */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <CameraIcon className="mr-2 h-5 w-5" />
-                ESP32-CAM Controls
-              </CardTitle>
-              
-            </CardHeader>
-            <CardContent>
-              {loading ? <div className="space-y-4">
-                  <Skeleton className="h-10 w-full" />
-                  <Skeleton className="h-10 w-full" />
-                  <Skeleton className="h-10 w-full" />
-                </div> : <div className="space-y-6">
+          <div className="modern-card p-4">
+            <div className="flex items-center space-x-2 mb-4">
+              <CameraIcon className="h-4 w-4 text-primary" />
+              <h2 className="font-medium text-foreground">Camera Controls</h2>
+            </div>
+            {loading ? <div className="space-y-4">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div> : <div className="space-y-4">
                   {error && <Alert variant="destructive">
                       <AlertDescription>{error}</AlertDescription>
                     </Alert>}
                   
                   <div className="flex flex-col space-y-2">
-                    <div className="text-sm text-muted-foreground mb-2">
-                      Status: {status ? <span className={`font-medium ${status.ipAddress === 'Not connected yet' ? 'text-amber-500' : 'text-green-500'}`}>
-                          {status.ipAddress === 'Not connected yet' ? 'Waiting for ESP32-CAM to connect' : `Connected (${status.ipAddress})`}
-                        </span> : 'Offline'}
+                  <div className="flex items-center justify-between p-3 bg-card/30 rounded-lg border border-border/50 mb-4">
+                    <div className="flex items-center space-x-2">
+                      <div className={`status-dot ${status && status.ipAddress !== 'Not connected yet' ? 'status-online' : 'status-warning'}`} />
+                      <span className="text-xs font-medium mono">
+                        {status && status.ipAddress !== 'Not connected yet' ? 'CONNECTED' : 'WAITING'}
+                      </span>
                     </div>
+                    <span className="text-xs text-muted-foreground mono">
+                      {status?.ipAddress || 'No IP'}
+                    </span>
+                  </div>
                     
-                    <Button onClick={handleTakePhoto} disabled={commandLoading || !status || status.ipAddress === 'Not connected yet'} className="w-full">
-                      {commandLoading ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <CameraIcon className="mr-2 h-4 w-4" />}
-                      Take New Photo
-                    </Button>
+                  <Button 
+                    onClick={handleTakePhoto} 
+                    disabled={commandLoading || !status || status.ipAddress === 'Not connected yet'} 
+                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+                  >
+                    {commandLoading ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <CameraIcon className="mr-2 h-4 w-4" />}
+                    Take Photo
+                  </Button>
                     
                     {status?.ipAddress === 'Not connected yet' && <p className="text-xs text-amber-500">
                         Waiting for ESP32-CAM to connect to Firebase. Make sure your ESP32-CAM is powered on and connected to WiFi.
                       </p>}
                   </div>
                   
-                  <div className="flex items-center justify-between space-x-4 p-4 border rounded-md">
+                <div className="flex items-center justify-between p-3 bg-card/30 rounded-lg border border-border/50">
                     <div className="flex items-center space-x-2">
-                      <Zap className="h-4 w-4 text-amber-500" />
-                      <Label htmlFor="flash-toggle">Flash LED</Label>
+                      <Zap className="h-4 w-4 text-primary" />
+                      <span className="text-sm font-medium">Flash LED</span>
                     </div>
-                    <Switch id="flash-toggle" checked={status?.flashState === 'ON'} onCheckedChange={handleToggleFlash} disabled={commandLoading || !status || status.ipAddress === 'Not connected yet'} />
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs text-muted-foreground mono">
+                        {status?.flashState === 'ON' ? 'ON' : 'OFF'}
+                      </span>
+                      <Switch 
+                        checked={status?.flashState === 'ON'} 
+                        onCheckedChange={handleToggleFlash} 
+                        disabled={commandLoading || !status || status.ipAddress === 'Not connected yet'}
+                        className="data-[state=checked]:bg-primary"
+                      />
+                    </div>
                   </div>
                   
-                  <div className="space-y-2">
-                    <Label htmlFor="interval-input" className="flex items-center">
-                      <Clock className="mr-2 h-4 w-4" />
-                      Auto Photo Interval (hours)
-                    </Label>
+                <div className="space-y-3">
+                    <div className="flex items-center space-x-2">
+                      <Clock className="h-4 w-4 text-primary" />
+                      <span className="text-sm font-medium">Auto Interval</span>
+                    </div>
                     <div className="flex space-x-2">
-                      <Input id="interval-input" type="number" min="0.25" max="48" step="0.25" value={photoInterval} onChange={e => setPhotoInterval(e.target.value)} disabled={commandLoading || !status || status.ipAddress === 'Not connected yet'} />
-                      <Button onClick={handleIntervalChange} disabled={commandLoading || !status || status.ipAddress === 'Not connected yet'} size="icon">
+                      <Input 
+                        type="number" 
+                        min="0.25" 
+                        max="48" 
+                        step="0.25" 
+                        value={photoInterval} 
+                        onChange={e => setPhotoInterval(e.target.value)} 
+                        disabled={commandLoading || !status || status.ipAddress === 'Not connected yet'}
+                        className="bg-card/50 border-border/50"
+                        placeholder="Hours"
+                      />
+                      <Button 
+                        onClick={handleIntervalChange} 
+                        disabled={commandLoading || !status || status.ipAddress === 'Not connected yet'} 
+                        size="icon"
+                        variant="outline"
+                        className="border-border/50"
+                      >
                         <Send className="h-4 w-4" />
                       </Button>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Current interval: {status?.photoIntervalHours} hours
+                    <p className="text-xs text-muted-foreground mono">
+                      Current: {status?.photoIntervalHours}h
                     </p>
                   </div>
-                </div>}
-            </CardContent>
-          </Card>
+              </div>}
+          </div>
           
           {/* Photo Gallery */}
-          <Card className="md:row-span-2 overflow-hidden">
-            <CardHeader>
-              <CardTitle>Plant Photo Gallery</CardTitle>
-              <CardDescription>
-                Photos captured by ESP32-CAM
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="overflow-auto max-h-[70vh]">
+          <div className="modern-card p-4 md:row-span-2 overflow-hidden">
+            <div className="flex items-center space-x-2 mb-4">
+              <CameraIcon className="h-4 w-4 text-primary" />
+              <h2 className="font-medium text-foreground">Photo Gallery</h2>
+              <span className="text-xs text-muted-foreground mono">
+                {photos.length} photos
+              </span>
+            </div>
+            <div className="overflow-auto max-h-[70vh]">
               {renderPhotoGallery()}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
       </main>
 

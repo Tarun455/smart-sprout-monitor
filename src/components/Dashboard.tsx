@@ -3,10 +3,10 @@ import { useState, useEffect } from 'react';
 import SensorReadings from './SensorReadings';
 import ControlPanel from './ControlPanel';
 import HistoryChart from './HistoryChart';
-import { 
-  SensorData, 
-  subscribeSensorData, 
-  subscribeThresholds, 
+import {
+  SensorData,
+  subscribeSensorData,
+  subscribeThresholds,
   ThresholdValues,
   subscribeAlerts,
   AlertSettings
@@ -23,8 +23,7 @@ const Dashboard = () => {
   const [alertSettings, setAlertSettings] = useState<AlertSettings>({
     email: '',
     temperatureAlerts: false,
-    moistureAlerts: false,
-    co2Alerts: false
+    moistureAlerts: false
   });
 
   useEffect(() => {
@@ -32,18 +31,18 @@ const Dashboard = () => {
     const timeInterval = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000);
-    
+
     const unsubscribeSensors = subscribeSensorData(data => {
       console.log('Received sensor data:', data);
       setSensorData(data);
-      
+
       // Track the last data update timestamp
       if (data && data.lastUpdate) {
         setLastDataUpdate(data.lastUpdate);
         console.log('Updated lastDataUpdate to:', data.lastUpdate);
       }
     });
-    
+
     const unsubscribeThresholds = subscribeThresholds(data => {
       setThresholds(data);
     });
@@ -70,24 +69,23 @@ const Dashboard = () => {
     if (sensorData && thresholds && alertSettings) {
       // Only check thresholds for enabled alerts
       checkThresholds(
-        sensorData, 
-        thresholds, 
+        sensorData,
+        thresholds,
         alertSettings.email,
         {
           temperatureAlerts: alertSettings.temperatureAlerts,
-          moistureAlerts: alertSettings.moistureAlerts,
-          co2Alerts: alertSettings.co2Alerts
+          moistureAlerts: alertSettings.moistureAlerts
         }
       );
     }
   }, [sensorData, thresholds, alertSettings]);
 
   return (
-    <div className="container mx-auto px-2 sm:px-4 pb-16">
+    <div className="space-y-4 sm:space-y-6">
       <SensorReadings />
       <ControlPanel />
-      
-      <div className="mt-6">
+
+      <div className="modern-card p-3 sm:p-4">
         <HistoryChart />
       </div>
     </div>

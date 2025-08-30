@@ -4,9 +4,9 @@ import Dashboard from '@/components/Dashboard';
 
 const Index = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-background/70">
+    <div className="min-h-screen bg-background">
       <Header />
-      <main className="animate-fade-in pt-4 px-4">
+      <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-6 fade-in">
         <Dashboard />
       </main>
     </div>

@@ -1,8 +1,7 @@
 import { useEffect } from 'react';
 import Header from '@/components/Header';
 import ThresholdSettings from '@/components/ThresholdSettings';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wifi, Database, AlertTriangle, Bell, BellOff, Mail, ChevronDown, Sun, Moon } from 'lucide-react';
+import { Wifi, Database, AlertTriangle, Bell, BellOff, Mail, ChevronDown, Sun, Moon, Thermometer, Droplet, Wind } from 'lucide-react';
 import { useState } from 'react';
 import { SystemStatus, subscribeSystemStatus, subscribeAlerts, updateAlertSettings, AlertSettings } from '@/services/firebase';
 import { formatInTimeZone } from 'date-fns-tz';
@@ -26,7 +25,8 @@ const Settings = () => {
     email: '',
     temperatureAlerts: false,
     moistureAlerts: false,
-    co2Alerts: false
+    soilTemperatureAlerts: false,
+    humidityAlerts: false
   });
   useEffect(() => {
     // Update current time every second
@@ -92,154 +92,169 @@ const Settings = () => {
     const date = new Date(timestamp);
     return formatInTimeZone(date, 'Asia/Kolkata', "PPpp") + ' IST';
   };
-  
+
   return <div className="min-h-screen bg-background">
-      <Header />
-      
-      <main className="container mx-auto px-4 pb-16 animate-fade-in">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-semibold">Settings</h1>
-          
-          <div>
-            {userEmail ? <div className="text-xs text-muted-foreground flex items-center">
-                
-                
-              </div> : <button className="text-xs text-blue-500 hover:underline" onClick={() => {
-            const email = prompt('Enter email for alerts:');
-            if (email) {
-              localStorage.setItem('alertEmail', email);
-              setUserEmail(email);
-              // Also update in alertSettings
-              updateAlertSetting('email', email);
-            }
-          }}>
-                Enable email alerts
-              </button>}
+    <Header />
+
+    <main className="container mx-auto px-4 py-6 fade-in">
+
+      <div className="grid gap-6">
+        <Collapsible className="w-full">
+          <div className="modern-card overflow-hidden">
+            <CollapsibleTrigger className="w-full text-left">
+              <div className="flex items-center justify-between p-4">
+                <div className="flex items-center space-x-2">
+                  <Bell className="h-4 w-4 text-primary" />
+                  <div>
+                    <h3 className="font-medium text-foreground">Alert Settings</h3>
+                    <p className="text-xs text-muted-foreground">Configure notification preferences</p>
+                  </div>
+                </div>
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 ui-expanded:rotate-180" />
+              </div>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="px-4 pb-4 border-t border-border/50">
+                <div className="space-y-4 pt-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="alert-email" className="text-sm font-medium">Email Address</Label>
+                    <div className="flex items-center space-x-2">
+                      <Mail className="h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="alert-email"
+                        type="email"
+                        value={alertSettings?.email || ''}
+                        onChange={e => updateAlertSetting('email', e.target.value)}
+                        placeholder="your@email.com"
+                        className="bg-card/50 border-border/50"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-medium text-foreground">Alert Types</h4>
+
+                    <div className="flex items-center justify-between p-3 bg-card/30 rounded-lg border border-border/50">
+                      <div className="flex items-center space-x-2">
+                        <Thermometer className="h-4 w-4 text-primary" />
+                        <span className="text-sm">Temperature</span>
+                        {alertSettings?.temperatureAlerts ? <Bell className="h-3 w-3 text-primary" /> : <BellOff className="h-3 w-3 text-muted-foreground" />}
+                      </div>
+                      <Switch
+                        checked={!!alertSettings?.temperatureAlerts}
+                        onCheckedChange={checked => updateAlertSetting('temperatureAlerts', checked)}
+                        className="data-[state=checked]:bg-primary"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 bg-card/30 rounded-lg border border-border/50">
+                      <div className="flex items-center space-x-2">
+                        <Droplet className="h-4 w-4 text-primary" />
+                        <span className="text-sm">Soil Moisture</span>
+                        {alertSettings?.moistureAlerts ? <Bell className="h-3 w-3 text-primary" /> : <BellOff className="h-3 w-3 text-muted-foreground" />}
+                      </div>
+                      <Switch
+                        checked={!!alertSettings?.moistureAlerts}
+                        onCheckedChange={checked => updateAlertSetting('moistureAlerts', checked)}
+                        className="data-[state=checked]:bg-primary"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 bg-card/30 rounded-lg border border-border/50">
+                      <div className="flex items-center space-x-2">
+                        <Thermometer className="h-4 w-4 text-primary" />
+                        <span className="text-sm">Soil Temperature</span>
+                        {alertSettings?.soilTemperatureAlerts ? <Bell className="h-3 w-3 text-primary" /> : <BellOff className="h-3 w-3 text-muted-foreground" />}
+                      </div>
+                      <Switch
+                        checked={!!alertSettings?.soilTemperatureAlerts}
+                        onCheckedChange={checked => updateAlertSetting('soilTemperatureAlerts', checked)}
+                        className="data-[state=checked]:bg-primary"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 bg-card/30 rounded-lg border border-border/50">
+                      <div className="flex items-center space-x-2">
+                        <Droplet className="h-4 w-4 text-primary" />
+                        <span className="text-sm">Humidity</span>
+                        {alertSettings?.humidityAlerts ? <Bell className="h-3 w-3 text-primary" /> : <BellOff className="h-3 w-3 text-muted-foreground" />}
+                      </div>
+                      <Switch
+                        checked={!!alertSettings?.humidityAlerts}
+                        onCheckedChange={checked => updateAlertSetting('humidityAlerts', checked)}
+                        className="data-[state=checked]:bg-primary"
+                      />
+                    </div>
+
+
+                  </div>
+                </div>
+              </div>
+            </CollapsibleContent>
+          </div>
+        </Collapsible>
+
+        <ThresholdSettings />
+
+        {/* Appearance card */}
+        <div className="modern-card p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              {useTheme().theme === 'light' ? <Sun className="h-4 w-4 text-primary" /> : <Moon className="h-4 w-4 text-primary" />}
+              <div>
+                <h3 className="font-medium text-foreground">Appearance</h3>
+                <p className="text-xs text-muted-foreground">Toggle dark mode</p>
+              </div>
+            </div>
+            <ThemeToggle />
           </div>
         </div>
-        
-        <div className="grid gap-6">
-          <Collapsible className="w-full">
-            <Card className="overflow-hidden">
-              <CollapsibleTrigger className="w-full text-left">
-                <CardHeader className="flex flex-row items-center justify-between py-4">
-                  <div>
-                    <CardTitle className="flex items-center text-lg">
-                      <Bell className="mr-2 h-4 w-4" />
-                      Alert Settings
-                    </CardTitle>
-                    <CardDescription className="text-xs">
-                      Configure which conditions will trigger alerts
-                    </CardDescription>
-                  </div>
-                  <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 ui-expanded:rotate-180" />
-                </CardHeader>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <CardContent className="pt-0 pb-4 px-4">
-                  <div className="space-y-3">
-                    <div>
-                      <Label htmlFor="alert-email" className="mb-1 block text-sm">Email for alerts</Label>
-                      <div className="flex items-center">
-                        <Mail className="mr-2 h-4 w-4 text-muted-foreground" />
-                        <Input id="alert-email" type="email" value={alertSettings?.email || ''} onChange={e => updateAlertSetting('email', e.target.value)} placeholder="Enter email address" className="w-full text-sm" />
-                      </div>
-                    </div>
-                    
-                    <div className="pt-2 border-t">
-                      <div className="space-y-2 py-1">
-                        <div className="flex items-center justify-between p-2 border rounded-md">
-                          <Label htmlFor="temperature-alerts" className="flex items-center text-xs">
-                            <span className="mr-2">Temperature</span>
-                            {alertSettings?.temperatureAlerts ? <Bell className="h-3 w-3 text-green-500" /> : <BellOff className="h-3 w-3 text-gray-400" />}
-                          </Label>
-                          <Switch id="temperature-alerts" checked={!!alertSettings?.temperatureAlerts} onCheckedChange={checked => updateAlertSetting('temperatureAlerts', checked)} />
-                        </div>
-                        
-                        <div className="flex items-center justify-between p-2 border rounded-md">
-                          <Label htmlFor="moisture-alerts" className="flex items-center text-xs">
-                            <span className="mr-2">Soil Moisture</span>
-                            {alertSettings?.moistureAlerts ? <Bell className="h-3 w-3 text-green-500" /> : <BellOff className="h-3 w-3 text-gray-400" />}
-                          </Label>
-                          <Switch id="moisture-alerts" checked={!!alertSettings?.moistureAlerts} onCheckedChange={checked => updateAlertSetting('moistureAlerts', checked)} />
-                        </div>
-                        
-                        <div className="flex items-center justify-between p-2 border rounded-md">
-                          <Label htmlFor="co2-alerts" className="flex items-center text-xs">
-                            <span className="mr-2">CO₂ Level</span>
-                            {alertSettings?.co2Alerts ? <Bell className="h-3 w-3 text-green-500" /> : <BellOff className="h-3 w-3 text-gray-400" />}
-                          </Label>
-                          <Switch id="co2-alerts" checked={!!alertSettings?.co2Alerts} onCheckedChange={checked => updateAlertSetting('co2Alerts', checked)} />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </CollapsibleContent>
-            </Card>
-          </Collapsible>
 
-          <ThresholdSettings />
-          
-          {/* Appearance card - moved to bottom, just above System Info */}
-          <Card className="overflow-hidden">
-            <CardHeader className="py-4">
-              <CardTitle className="text-lg flex items-center">
-                {useTheme().theme === 'light' ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
-                Appearance
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0 pb-4 flex items-center justify-between">
-              <span className="text-sm">Dark mode</span>
-              <ThemeToggle />
-            </CardContent>
-          </Card>
+        <div className="modern-card p-4">
+          <div className="flex items-center space-x-2 mb-4">
+            <Database className="h-4 w-4 text-primary" />
+            <div>
+              <h3 className="font-medium text-foreground">System Information</h3>
+              <p className="text-xs text-muted-foreground">Greenhouse system status</p>
+            </div>
+          </div>
+          {!systemStatus ? <div className="space-y-3 animate-pulse">
+            {[...Array(2)].map((_, i) => <div key={i} className="h-12 bg-muted rounded"></div>)}
+          </div> : <div className="space-y-3">
+            <div className="flex items-center justify-between p-3 bg-card/30 rounded-lg border border-border/50">
+              <div className="flex items-center space-x-2">
+                <Wifi className="h-4 w-4 text-primary" />
+                <div>
+                  <p className="text-sm font-medium">Connection</p>
+                  <p className="text-xs text-muted-foreground mono">
+                    {systemStatus?.ipAddress || 'No IP'}
+                  </p>
+                </div>
+              </div>
+              <div className={`status-dot ${systemStatus?.isOnline ? 'status-online' : 'status-offline'}`} />
+            </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>System Information</CardTitle>
-              <CardDescription>
-                Information about your greenhouse system
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {!systemStatus ? <div className="space-y-4 animate-pulse">
-                  {[...Array(2)].map((_, i) => <div key={i} className="h-6 bg-gray-100 rounded"></div>)}
-                </div> : <div className="space-y-4">
-                  <div className="flex items-center space-x-3 py-2 border-b">
-                    <Wifi className="h-5 w-5 text-blue-500" />
-                    <div>
-                      <p className="text-sm font-medium">Connection Status</p>
-                      <p className="text-sm text-muted-foreground">
-                        {systemStatus?.isOnline ? 'Online' : 'Offline'}
-                        {systemStatus?.ipAddress && ` (${systemStatus.ipAddress})`}
-                      </p>
-                    </div>
+            {systemStatus?.freeHeap !== undefined && <div className="flex items-center justify-between p-3 bg-card/30 rounded-lg border border-border/50">
+              <div className="flex items-center space-x-2">
+                <Database className="h-4 w-4 text-primary" />
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <p className="text-sm font-medium">Memory</p>
+                    <span className={`text-xs font-medium mono ${memoryStatus.color}`}>
+                      {memoryStatus.text}
+                    </span>
                   </div>
-                  
-                  {systemStatus?.freeHeap !== undefined && <div className="flex items-center space-x-3 py-2">
-                      <Database className={`h-5 w-5 ${memoryStatus.color}`} />
-                      <div>
-                        <div className="flex items-center">
-                          <p className="text-sm font-medium">Memory Status</p>
-                          <span className={`ml-2 text-xs ${memoryStatus.color} font-medium`}>
-                            {memoryStatus.text}
-                          </span>
-                          {memoryStatus.text !== 'Good' && <AlertTriangle className={`h-3 w-3 ml-1 ${memoryStatus.color}`} />}
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          Free memory: {systemStatus.freeHeap.toLocaleString()} bytes 
-                          {memoryStatus.text !== 'Good' && <span className="text-xs ml-1">
-                              ({memoryStatus.text === 'Critical' ? 'System may crash soon' : 'Memory running low'})
-                            </span>}
-                        </p>
-                      </div>
-                    </div>}
-                </div>}
-            </CardContent>
-          </Card>
+                  <p className="text-xs text-muted-foreground mono">
+                    {(systemStatus.freeHeap / 1024).toFixed(1)}KB free
+                  </p>
+                </div>
+              </div>
+              <div className={`status-dot ${memoryStatus.text === 'Good' ? 'status-online' : memoryStatus.text === 'Warning' ? 'status-warning' : 'status-offline'}`} />
+            </div>}
+          </div>}
         </div>
-      </main>
-    </div>;
+      </div>
+    </main>
+  </div>;
 };
 export default Settings;
