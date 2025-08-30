@@ -1,104 +1,146 @@
 flowchart LR
-    A[Start] --> B[Initialize Serial Communication]
-    B --> C[Set WiFi Retry Counter = 0]
-    C --> D{WiFi Connected?}
-    D -->|No| E[Attempt WiFi Connection]
-    E --> F[Increment Retry Counter]
-    F --> G{Retry Counter < Max Retries?}
-    G -->|Yes| H[Delay 2 seconds]
-    H --> D
-    G -->|No| I[Restart ESP32]
-    I --> A
+    A[Start] --> B[Initialize Serial Communication<br/>SmartSprout v2.1]
+    B --> C[Initialize I2C Buses<br/>Bus 1: SHT30 Greenhouse Sensors<br/>Bus 2: SHT30 Outside Sensor]
+    C --> D[Initialize Sensor Pins<br/>4x Soil Moisture<br/>2x DS18B20 Soil Temperature]
+    D --> E[Initialize Relay Pins<br/>2x Water Pumps, Fan, Light<br/>Set all to OFF state]
+    E --> F[Initialize DS18B20 Sensors]
+    F --> G[Initialize SHT30 Sensors<br/>Check connection status]
     
-    D -->|Yes| J[Configure Firebase<br/>API Key, Database URL<br/>Email, Password]
-    J --> K[Initialize Firebase Authentication]
-    K --> L{Firebase Token Ready?}
-    L -->|No| M[Log Firebase Connection Error]
-    M --> N[Delay 5 seconds]
-    N --> K
-    L -->|Yes| O[Initialize DHT Sensor]
-    O --> P[Initialize MQ135 Sensor]
-    P --> Q[Initialize Soil Moisture Sensor]
-    Q --> R[Initialize NTP Client]
-    R --> S[Configure GPIO Pins for Relays<br/>Pump, Fan, Light]
-    S --> T[Setup Complete - Start Main Loop]
+    G --> H[Establish Internet Connection]
+    H --> I{WiFi Available?}
+    I -->|Yes| J[Connect to WiFi]
+    I -->|No| K[Try GPRS Connection<br/>SIM800L Module]
+    J --> L{WiFi Connected?}
+    K --> M{GPRS Connected?}
+    L -->|No| K
+    M -->|No| N[No Connection - Restart ESP32]
+    N --> A
+    L -->|Yes| O[Connection: WiFi]
+    M -->|Yes| P[Connection: GPRS]
     
-    T --> U[Check WiFi Connection Status]
-    U --> V{WiFi Connected?}
-    V -->|No| W[Log WiFi Disconnection]
-    W --> X[Attempt WiFi Reconnection]
-    X --> Y{Reconnection Successful?}
-    Y -->|No| Z[Log WiFi Error]
-    Z --> AA[Delay 5 seconds]
-    AA --> U
-    Y -->|Yes| BB[Get Current Time from NTP]
-    V -->|Yes| BB
+    O --> Q[Initialize NTP Client<br/>Set IST Timezone +5:30]
+    P --> Q
+    Q --> R[Attempt Time Synchronization<br/>15 second timeout]
+    R --> S{Time Sync Success?}
+    S -->|No| T[Continue with background retry]
+    S -->|Yes| U[Time synchronized]
+    T --> V[Initialize Firebase]
+    U --> V
     
-    BB --> CC[Read Soil Moisture Sensor]
-    CC --> DD[Read DHT Temperature & Humidity]
-    DD --> EE[Read MQ135 CO₂ Level]
-    EE --> FF[Create Sensor Data Object]
-    FF --> GG[Send Sensor Data to Firebase]
-    GG --> HH{Firebase Write Successful?}
-    HH -->|No| II[Log Firebase Write Error]
-    II --> JJ[Attempt Firebase Reconnection]
-    JJ --> KK{Firebase Reconnection OK?}
-    KK -->|No| LL[Delay 3 seconds]
-    LL --> MM[Continue to Control Commands]
-    KK -->|Yes| MM
-    HH -->|Yes| MM[Fetch Control Commands from Firebase<br/>pump_control, fan_control, light_control]
+    V --> W[Configure Firebase<br/>API Key, Database URL<br/>Email Authentication]
+    W --> X[Wait for Firebase Token<br/>30 second timeout]
+    X --> Y{Firebase Ready?}
+    Y -->|No| Z[Firebase connection failed]
+    Y -->|Yes| AA[Fetch thresholds from Firebase<br/>Temperature, Moisture, Light Schedule]
+    Z --> BB[Continue without Firebase]
+    AA --> BB
     
-    MM --> NN{Firebase Read Successful?}
-    NN -->|No| OO[Log Firebase Read Error]
-    OO --> PP[Use Previous Control Values]
-    NN -->|Yes| PP
-    PP --> QQ[Execute Manual Control Commands]
-    QQ --> RR[Set Pump GPIO based on pump_control]
-    RR --> SS[Set Fan GPIO based on fan_control]
-    SS --> TT[Set Light GPIO based on light_control]
+    BB --> CC[Initial Sensor Reading]
+    CC --> DD[Send Initial Data to Firebase]
+    DD --> EE[Start in Manual Mode<br/>10 minute startup period]
+    EE --> FF[Main Loop Start]
     
-    TT --> UU{Automatic Mode Enabled?}
-    UU -->|No| VV[Update Device Status in Firebase]
-    UU -->|Yes| WW{Soil Moisture < Threshold?}
-    WW -->|Yes| XX[Turn Pump ON]
-    WW -->|No| YY[Turn Pump OFF]
-    XX --> ZZ{CO₂ Level > Threshold?}
-    YY --> ZZ
-    ZZ -->|Yes| AAA[Turn Fan ON]
-    ZZ -->|No| BBB[Turn Fan OFF]
-    AAA --> CCC{Is Daytime?}
-    BBB --> CCC
-    CCC -->|Yes| DDD[Turn Light ON]
-    CCC -->|No| EEE[Turn Light OFF]
-    DDD --> FFF[Update Relay States]
-    EEE --> FFF
+    %% Main Loop
+    FF --> GG{Startup Period Complete?}
+    GG -->|No| HH[Manual Mode Active]
+    GG -->|Yes| II[Switch to Automatic Mode]
+    HH --> JJ[Check Connection Status]
+    II --> JJ
     
-    FFF --> VV
-    VV --> GGG{Firebase Status Update Successful?}
-    GGG -->|No| HHH[Log Status Update Error]
-    GGG -->|Yes| III[Log Successful Operation]
-    HHH --> JJJ[Delay Loop Interval<br/>5-10 seconds]
-    III --> JJJ
-    JJJ --> U
+    JJ --> KK{Connection Lost?}
+    KK -->|Yes| LL[Attempt Reconnection<br/>WiFi first, then GPRS]
+    KK -->|No| MM[Update NTP Time]
+    LL --> NN{Reconnection Success?}
+    NN -->|No| OO{Max Retries Reached?}
+    NN -->|Yes| MM
+    OO -->|Yes| PP[Restart ESP32]
+    OO -->|No| LL
+    PP --> A
     
-    %% Error handling connections
-    MM -.->|Connection Lost| KKK[Check Firebase Connection]
-    KKK --> LLL{Firebase Connected?}
-    LLL -->|No| MMM[Reinitialize Firebase]
-    MMM --> K
-    LLL -->|Yes| MM
+    MM --> QQ{Time for Sensor Reading?}
+    QQ -->|Yes| RR[Read All Sensors<br/>4x Soil Moisture<br/>3x SHT30 Temp/Humidity<br/>2x DS18B20 Soil Temperature]
+    QQ -->|No| SS{Automatic Mode?}
+    RR --> TT[Calculate Averages<br/>Handle NAN values]
+    TT --> SS
     
-    %% Styling - High contrast colors for better visibility
+    SS -->|Yes| UU[Control Water Pumps<br/>5-second bursts<br/>1-hour cooldown]
+    SS -->|No| VV{Time for Firebase Update?}
+    UU --> WW[Control Fans<br/>Temperature thresholds<br/>Timer override every hour]
+    WW --> XX[Control Lights<br/>Time-based schedule]
+    XX --> VV
+    
+    VV -->|Yes| YY[Update Firebase Sensors<br/>Only if values changed]
+    VV -->|No| ZZ{Time for Status Update?}
+    YY --> AAA[Update Firebase Relays<br/>Only if states changed]
+    AAA --> BBB[Update Firebase Thresholds<br/>Only if changed]
+    BBB --> CCC[Update Firebase Mode<br/>Only if changed]
+    CCC --> ZZ
+    
+    ZZ -->|Yes| DDD[Update ESP32 Status<br/>Memory, Connection Type<br/>Check for warnings]
+    ZZ -->|No| EEE{Time for History Update?}
+    DDD --> EEE
+    
+    EEE -->|Yes| FFF[Log Historical Data<br/>Timestamp + all sensor values]
+    EEE -->|No| GGG[Check Firebase Commands<br/>Mode changes, thresholds<br/>Manual relay controls]
+    FFF --> GGG
+    
+    GGG --> HHH[Memory Management<br/>Check heap usage<br/>Report warnings if low]
+    HHH --> III[Loop Delay 100ms]
+    III --> FF
+    
+    %% Pump Control Detail
+    UU --> JJJ{Pump 1 Active?}
+    JJJ -->|Yes| KKK{5 seconds elapsed?}
+    JJJ -->|No| LLL{Zones 1-2 need water?}
+    KKK -->|Yes| MMM[Turn OFF Pump 1<br/>Set cooldown timer]
+    KKK -->|No| NNN{Pump 2 Active?}
+    LLL -->|Yes| OOO{Cooldown period over?}
+    LLL -->|No| NNN
+    OOO -->|Yes| PPP[Turn ON Pump 1<br/>Start 5-second timer]
+    OOO -->|No| NNN
+    MMM --> NNN
+    PPP --> NNN
+    
+    NNN -->|Yes| QQQ{5 seconds elapsed?}
+    NNN -->|No| RRR{Zones 3-4 need water?}
+    QQQ -->|Yes| SSS[Turn OFF Pump 2<br/>Set cooldown timer]
+    QQQ -->|No| WW
+    RRR -->|Yes| TTT{Cooldown period over?}
+    RRR -->|No| WW
+    TTT -->|Yes| UUU[Turn ON Pump 2<br/>Start 5-second timer]
+    TTT -->|No| WW
+    SSS --> WW
+    UUU --> WW
+    
+    %% Fan Control Detail
+    WW --> VVV{Temperature > Threshold?}
+    VVV -->|Yes| WWW[Turn ON Fan<br/>Sensor activation]
+    VVV -->|No| XXX{Fan timer needed?}
+    WWW --> XXX
+    XXX -->|Yes| YYY[Turn ON Fan<br/>Timer activation<br/>5 minute runtime]
+    XXX -->|No| ZZZ{Fan timer complete?}
+    YYY --> ZZZ
+    ZZZ -->|Yes| AAAA{Sensor still needs fan?}
+    ZZZ -->|No| XX
+    AAAA -->|No| BBBB[Turn OFF Fan]
+    AAAA -->|Yes| XX
+    BBBB --> XX
+    
+    %% Styling
     classDef startEnd fill:#90EE90,stroke:#000000,stroke-width:3px,color:#000000
     classDef process fill:#E6E6FA,stroke:#000000,stroke-width:2px,color:#000000
     classDef decision fill:#FFE4B5,stroke:#000000,stroke-width:2px,color:#000000
     classDef error fill:#FFB6C1,stroke:#000000,stroke-width:3px,color:#000000
     classDef sensor fill:#98FB98,stroke:#000000,stroke-width:2px,color:#000000
     classDef firebase fill:#87CEEB,stroke:#000000,stroke-width:2px,color:#000000
+    classDef connection fill:#DDA0DD,stroke:#000000,stroke-width:2px,color:#000000
+    classDef control fill:#F0E68C,stroke:#000000,stroke-width:2px,color:#000000
     
-    class A,T startEnd
-    class B,C,E,F,H,J,O,P,Q,R,S,CC,DD,EE,FF,RR,SS,TT,XX,YY,AAA,BBB,DDD,EEE,FFF,JJJ process
-    class D,G,L,V,Y,HH,NN,UU,WW,ZZ,CCC,GGG,LLL decision
-    class I,M,W,Z,II,OO,HHH error
-    class CC,DD,EE sensor
-    class GG,MM,VV,KKK,MMM firebase
+    class A,FF startEnd
+    class B,C,D,E,F,G,J,K,O,P,Q,R,U,V,W,CC,DD,EE,HH,II,LL,RR,TT,III process
+    class I,L,M,S,Y,GG,KK,NN,OO,QQ,SS,VV,ZZ,EEE decision
+    class N,Z,BB,PP error
+    class RR,TT sensor
+    class AA,DD,YY,AAA,BBB,CCC,FFF,GGG firebase
+    class H,JJ connection
+    class UU,WW,XX,JJJ,KKK,LLL,MMM,NNN,OOO,PPP,QQQ,RRR,SSS,TTT,UUU,VVV,WWW,XXX,YYY,ZZZ,AAAA,BBBB control
